@@ -1,0 +1,68 @@
+#+title: Remote Browser
+
+A Linux-based remote browser management system written in modern C++.
+
+The goal of this project is to explore Linux process management, browser automation, inter-process communication, and security isolation while building a practical foundation for a secure remote browsing solution.
+
+** Goals
+- Manage browser processes through Linux system calls.
+- Implement reliable process lifecycle management.
+- Integrate Chromium and the Chrome DevTools Protocol (CDP).
+- Explore process isolation and security boundaries.
+- Build communication mechanisms for remote browser interaction.
+- Apply modern C++ design principles and Linux systems programming.
+
+** Tech Stack
+| Technology  | Purpose                      |
+|-------------+------------------------------|
+| C++20       | Primary programming language |
+| GCC / Clang | C++ compiler                 |
+| CMake       | Build system                 |
+| Ninja       | Build execution              |
+| GoogleTest  | Unit testing                 |
+| GDB         | Debugging                    |
+| Nix         | Development environment      |
+| Git         | Version control              |
+
+** Development Environment
+This project uses Nix to provide an isolated and reproducible development environment.
+
+Enter the environment:
+#+begin_src sh
+nix-shell
+#+end_src
+
+The development shell provides the compiler, build tools, debugger, testing framework, and other development dependencies.
+
+** Building
+*Configure the project:*
+#+begin_src sh
+configure
+#+end_src
+
+*Build:*
+#+begin_src sh
+build
+#+end_src
+
+*Clean rebuild:*
+
+#+begin_src sh
+rebuild
+#+end_src
+
+** Learning Objectives
+
+This project is also an exercise in practical systems programming, covering:
+
+- Modern C++ and object-oriented design
+- Linux system calls and process management
+- RAII and resource ownership
+- Exception safety and error handling
+- Concurrency and synchronization
+- Network programming
+- Unit testing and debugging
+- CMake and build automation
+
+** License
+To be determined.
