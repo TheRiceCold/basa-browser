@@ -8,6 +8,7 @@
 #include <csignal>
 #include <cerrno>
 #include <sys/wait.h>
+#include <thread>
 
 namespace basa_browser {
   Process::Process(std::string executable, std::vector<std::string> args)
@@ -110,14 +111,24 @@ namespace basa_browser {
     return termination_signal_;
   }
 
-  void Process::terminate() {
+  void Process::terminate(std::chrono::milliseconds grace_period) {
     std::cout << "Process Terminate\n";
 
     if (!running()) return;
 
-    if (kill(pid_, SIGTERM) == -1 // Failed to send SIGTERM(Signal Terminate)
-	and errno != ESRCH) // ESRCH: No such process
-      throw std::system_error(errno, std::generic_category(), "kill");
+    if (kill(pid_, SIGTERM) == -1 and errno != ESRCH)
+      throw std::system_error(errno, std::generic_category(), "kill(SIGTERM)");
+
+    const auto deadline = std::chrono::steady_clock::now() + grace_period;
+
+    while(std::chrono::steady_clock::now() < deadline) {
+      if (!running()) return;
+      std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    }
+
+    // Process didn't exist within the grace period.
+    if (kill(pid_, SIGKILL) == -1 and errno != ESRCH)
+      throw std::system_error(errno, std::generic_category(), "kill(SIGKILL)");
 
     int status = 0;
     pid_t result;

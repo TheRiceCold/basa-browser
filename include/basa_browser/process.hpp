@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <vector>
 #include <optional>
+#include <chrono>
 
 namespace basa_browser {
   // Linux Process Abstraction
@@ -41,7 +42,7 @@ namespace basa_browser {
     // Process& operator=(Process&&) noexcept;
 
     void start();
-    void terminate();
+    void terminate(std::chrono::milliseconds grace_period = std::chrono::milliseconds{2});
 
     // [[nodiscard]] C++ 17
     // Warns if called and return value is ignored.
