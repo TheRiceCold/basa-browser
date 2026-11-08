@@ -61,9 +61,25 @@ namespace basa_browser {
       throw std::system_error(errno, std::generic_category(), "fork");
 
     if (child == 0) {
+      // Child: create a new process group.
+      if (setpgid(0, 0) == -1) _exit(126);
+
       execv(executable_.c_str(), argv.data());
       // when exec fails
       _exit(127); // 127: Command not found
+    }
+
+    // Parent: attempt to establish the process group.
+    if (setpgid(child, child) == -1
+	and errno != EACCES
+	and errno != ESRCH) {
+
+      const int error = errno; // Preserve error code
+
+      kill(child, SIGKILL);
+      waitpid(child, nullptr, 0);
+
+      throw std::system_error(error, std::generic_category(), "setpgid");
     }
 
     pid_ = child;
@@ -116,7 +132,7 @@ namespace basa_browser {
 
     if (!running()) return;
 
-    if (kill(pid_, SIGTERM) == -1 and errno != ESRCH)
+    if (kill(-pid_, SIGTERM) == -1 and errno != ESRCH)
       throw std::system_error(errno, std::generic_category(), "kill(SIGTERM)");
 
     const auto deadline = std::chrono::steady_clock::now() + grace_period;
@@ -127,7 +143,7 @@ namespace basa_browser {
     }
 
     // Process didn't exist within the grace period.
-    if (kill(pid_, SIGKILL) == -1 and errno != ESRCH)
+    if (kill(-pid_, SIGKILL) == -1 and errno != ESRCH)
       throw std::system_error(errno, std::generic_category(), "kill(SIGKILL)");
 
     int status = 0;
