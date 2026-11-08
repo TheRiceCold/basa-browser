@@ -10,7 +10,8 @@
 #include <sys/wait.h>
 
 namespace basa_browser {
-  Process::Process(std::string executable) : executable_(std::move(executable)) {
+  Process::Process(std::string executable, std::vector<std::string> args)
+    : executable_(std::move(executable)), args_(std::move(args)) {
     std::cout << "Process Constructor\n";
     if (executable_.empty())
       throw std::invalid_argument("Executable cannot be empty");
@@ -19,26 +20,39 @@ namespace basa_browser {
   Process::~Process() {
     try {
       std::cout << "Process Destructor\n";
-      // terminate();
-    } catch(...) { } }
-
-  Process::Process(Process&& other) noexcept
-    : executable_(std::move(other.executable_)), pid_(std::exchange(other.pid_, -1)) {}
-
-  Process& Process::operator=(Process&& other) noexcept {
-    if (this != &other) {
-      // TODO: Implement full cleanup semantics
-      executable_ = std::move(other.executable_);
-      pid_ = std::exchange(other.pid_, -1);
+      terminate();
+    } catch(...) {
+      // NOTE: Destructors must not propagate exceptions.
+      // TODO: Add robust fallback cleanup.
     }
-
-    return *this;
   }
+
+  // Process::Process(Process&& other) noexcept
+  //   : executable_(std::move(other.executable_)), pid_(std::exchange(other.pid_, -1)) {}
+
+  // Process& Process::operator=(Process&& other) noexcept {
+  //   if (this != &other) {
+  //     // TODO: Implement full cleanup semantics
+  //     executable_ = std::move(other.executable_);
+  //     pid_ = std::exchange(other.pid_, -1);
+  //   }
+
+  //   return *this;
+  // }
 
   void Process::start() {
     std::cout << "Process Start\n";
     if (pid_ != -1)
       throw std::logic_error("Process can only be started once");
+
+    std::vector<char*> argv;
+    argv.reserve(args_.size() + 2); // reserve argv before fork
+
+    argv.push_back(executable_.data());
+
+    for (auto& a : args_) argv.push_back(a.data());
+
+    argv.push_back(nullptr);
 
     const pid_t child = fork();
 
@@ -46,36 +60,86 @@ namespace basa_browser {
       throw std::system_error(errno, std::generic_category(), "fork");
 
     if (child == 0) {
-      execl(executable_.c_str(), executable_.c_str(), static_cast<char*>(nullptr));
+      execv(executable_.c_str(), argv.data());
       // when exec fails
       _exit(127); // 127: Command not found
     }
 
     pid_ = child;
+    state_ = State::RUNNING;
+  }
+
+  void Process::update_state() {
+    if (state_ != State::RUNNING) return;
+
+    int status = 0;
+    pid_t result;
+
+    do {
+      result = waitpid(pid_, &status, WNOHANG); // don't wait for child to finish
+    } while (result == -1 and errno == EINTR); // -1: Error, EINTR: Interrupted
+
+    if (result == 0) return; // child hasn't exited yet.
+
+    if (result == -1)
+      throw std::system_error(errno, std::generic_category(), "waitpid");
+
+    if (WIFEXITED(status))
+      exit_code_ = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status))
+      termination_signal_ = WTERMSIG(status);
+
+    pid_ = -1;
+    state_ = State::EXITED;
+  }
+
+  bool Process::running() {
+    update_state();
+    return state_ == State::RUNNING;
+  }
+
+  Process::State Process::state() const noexcept {return state_;}
+  pid_t Process::pid() const noexcept {return pid_;}
+
+  std::optional<int> Process::exit_code() {
+    update_state();
+    return exit_code_;
+  }
+  std::optional<int> Process::termination_signal() {
+    update_state();
+    return termination_signal_;
   }
 
   void Process::terminate() {
     std::cout << "Process Terminate\n";
-    if (pid_ == -1) return;
+
+    if (!running()) return;
 
     if (kill(pid_, SIGTERM) == -1 // Failed to send SIGTERM(Signal Terminate)
 	and errno != ESRCH) // ESRCH: No such process
       throw std::system_error(errno, std::generic_category(), "kill");
 
     int status = 0;
+    pid_t result;
 
-    while (waitpid(pid_, &status, 0) == -1) {
-      if (errno == EINTR) continue; // Interrupted system call
-      if (errno == ECHILD) break; // No child process
+    do {
+      result = waitpid(pid_, &status, 0);
+    } while (result == -1 and errno == EINTR);
+
+    if (result == -1) {
+      if (errno == ECHILD) {
+	pid_ = -1;
+	state_ = State::EXITED;
+	return;
+      }
+
       throw std::system_error(errno, std::generic_category(), "waitpid");
     }
-    pid_ = -1;
-  }
 
-  bool Process::running() const noexcept {
-    if (pid_ == -1) return false;
-    return kill(pid_, 0) == 0
-      or errno == EPERM; // Operation not permitted
+    if (WIFEXITED(status)) exit_code_ = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status)) termination_signal_ = WTERMSIG(status);
+
+    pid_ = -1;
+    state_ = State::EXITED;
   }
-  pid_t Process::pid() const noexcept {return pid_;}
 }
