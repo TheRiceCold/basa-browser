@@ -53,12 +53,31 @@ namespace basa_browser {
     [[nodiscard]] std::optional<int> exit_code();
     [[nodiscard]] std::optional<int> termination_signal();
   private:
+    using argv_t = std::vector<char*>;
+    using pipe_t = std::array<int, 2>;
+
+    [[nodiscard]] argv_t build_argv();
+    [[nodiscard]] static pipe_t create_error_pipe();
+
+    static void report_child_error(int fd, int error) noexcept;
+
+    [[noreturn]] void execute_child(
+      int error_fd,
+      const char* executable,
+      char* const argv[]) noexcept;
+
+    static void configure_process_group(pid_t child);
+
+    [[nodiscard]] static std::optional<int> read_child_error(int fd);
+
+    static void cleanup_child(pid_t child) noexcept;
+
     void update_state();
 
     std::string executable_;
     std::vector<std::string> args_;
 
-    pid_t pid_{-1}; // -1: No child process currently associated with the object
+    pid_t pid_{-1}; // No child process associated
     State state_{State::NOT_STARTED};
 
     std::optional<int> exit_code_;
